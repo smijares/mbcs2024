@@ -14,6 +14,8 @@ The data type is 1 for 8-bit data (unsigned), 2 for 16-bit unsigned integers, 3 
 
 ## Models
 
+Pre-trained models to generate the results in this paper are available in the [GICI website](https://gici.uab.cat/GiciWebPage/downloads.php).
+
 ## Training a model
 
 To train a model, call the `train` command in the architecture script using the corresponding options. For example:
