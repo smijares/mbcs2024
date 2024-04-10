@@ -1,1 +1,43 @@
 # mbcs2024
+
+Code repository from "Learned spectral and spatial transforms for multispectral remote sensing data compression", by S. Mijares, J. Bartrina-Rapesta, M. Hernández-Cabronero, and J. Serra-Sagristà, submitted to the IEEE Transactions on Geoscience and Remote Sensing (TGRS) in 2024. This repository contains the scripts to train and run the proposed models. The following ReadMe details how to use the code, where to access test data, and the paper's pre trained models.
+
+## Test data
+
+The publically available sources of test data used for this paper, Landsat 8 OLI, AVIRIS, and Sentinel 2A, are available in the [GICI website](https://gici.uab.cat/GiciWebPage/datasets.php).
+
+Data is stored in .raw format as 16-bit unsigned samples, little endian byte order, and BSQ sample order. Test data files are stored with a standardised filename that the architecture script is automated to read:
+
+```<image name>.<bands>_<width>_<height>_<data type>_<endianness>_<is it RGB?>.raw```
+
+The data type is 1 for 8-bit data (unsigned), 2 for 16-bit unsigned integers, 3 for 16-bit signed integers, 4 for 32-bit integers, and 6 32-bit floating point numbers. If an image does not use this naming format, the user must specify these values in their command.
+
+## Models
+
+## Training a model
+
+To train a model, call the `train` command in the architecture script using the corresponding options. For example:
+
+```python3 architecture.py --model_path ./models/model_name train "/path/to/folder/*.raw" --lambda 0.00001 0.01 --epochs 1000 --steps_per_epoch 1000 --patchsize 256 --batchsize 6 --height 512 --width 512 --bands 8```
+
+## Running a trained model
+
+To use a trained model for compression and decompression, use the `architecture.py` script. For compression using a quality parameter, the command is as follows:
+
+```python3 architecture.py --model_path ./models/some_model_folder compress /path/to/folder/image.8_512_512_2_1_0.raw --quality 0.001```
+
+You can also compress multiple images in one run using wildcard inputs. This is faster than running the script multiple times, as the compilation, imprting of libraries (tensorflow and tensorflow-compression in particular), and loading of the model will be done only once, substatially speeding up runtime. Make sure you write the input filename in quotation marks in such case:
+
+```python3 architecture.py --model_path ./models/some_model_folder compress "/path/to/folder/*.raw" --quality 0.001```
+
+This architecture incorporates the compression at a user-defined bit rate feature from
+
+> S. M. i. Verdú, M. Chabert, T. Oberlin and J. Serra-Sagristà, "Reduced-Complexity Multirate Remote Sensing Data Compression With Neural Networks," in IEEE Geoscience and Remote Sensing Letters, vol. 20, pp. 1-5, 2023, Art no. 6011705, doi: 10.1109/LGRS.2023.3325477.
+
+This can be done as follows:
+
+```python3 architecture.py --model_path ./models/some_model_folder compress /path/to/folder/image.8_512_512_2_1_0.raw --bitrate 0.001```
+
+To decompress any compressed image (or set of images), simply use the `decompress` command:
+
+```python3 architecture.py --model_path ./models/some_model_folder decompress /path/to/folder/image.8_512_512_2_1_0.raw.tfci```
