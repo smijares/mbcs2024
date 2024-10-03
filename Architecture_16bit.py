@@ -38,11 +38,11 @@ import sys
 from absl import app
 from absl.flags import argparse_flags
 import tensorflow as tf
+from tensorflow import keras
 import tensorflow_datasets as tfds
 import tensorflow_compression as tfc
 import numpy as np
 import os
-# Uncomment following line for CPU-only usage. Necessary for inference on GPU-enabled devices.
 # os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
 """
@@ -96,19 +96,18 @@ class ModulatingTransform(tf.keras.Sequential):
   The lambda input value is normalised by the maximum lambda value provided in training.
   """
 
-  def __init__(self, hidden_nodes, num_hidden_layers, num_filters, maxval):
+  def __init__(self, hidden_nodes, num_filters, maxval):
     super().__init__()
     self.add(tf.keras.layers.Lambda(lambda x: x / maxval))
     self.add(tf.keras.layers.Dense(hidden_nodes, activation=tf.nn.relu, kernel_initializer='ones'))
-    self.add(tf.keras.layers.Dense(num_hidden_layers*num_filters, activation=tf.nn.relu, kernel_initializer='ones'))
-    self.add(tf.keras.layers.Lambda(lambda x: tf.reshape(x,(num_hidden_layers,num_filters))))
+    self.add(tf.keras.layers.Dense(num_filters, activation=tf.nn.relu, kernel_initializer='ones'))
 
-class AnalysisTransform(tf.keras.Sequential):
+class AnalysisTransform(keras.Sequential):
   """The analysis transform."""
 
   def __init__(self, num_filters_hidden, num_filters_latent):
     super().__init__(name="analysis")
-    self.add(tf.keras.layers.Lambda(lambda x: x / ((2**bit_length)-1)))
+    self.add(keras.layers.Lambda(lambda x: x / ((2**bit_length)-1)))
     self.add(tfc.SignalConv2D(
         num_filters_hidden, (5, 5), name="layer_0", corr=True, strides_down=2,
         padding="same_zeros", use_bias=True,
@@ -127,35 +126,35 @@ class AnalysisTransform(tf.keras.Sequential):
         activation=None))
 
 
-class SynthesisTransform(tf.keras.Sequential):
+class SynthesisTransform(keras.Sequential):
   """The synthesis transform."""
 
   def __init__(self, num_filters):
     super().__init__(name="synthesis")
-    self.add(tf.keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
+    self.add(keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
     self.add(tfc.SignalConv2D(
         num_filters, (5, 5), name="layer_0", corr=False, strides_up=1,
         padding="same_zeros", use_bias=True,
         activation=tfc.GDN(name="igdn_0", inverse=True)))
-    self.add(tf.keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
+    self.add(keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
     self.add(tfc.SignalConv2D(
         num_filters, (5, 5), name="layer_1", corr=False, strides_up=1,
         padding="same_zeros", use_bias=True,
         activation=tfc.GDN(name="igdn_1", inverse=True)))
-    self.add(tf.keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
+    self.add(keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
     self.add(tfc.SignalConv2D(
         num_filters, (5, 5), name="layer_2", corr=False, strides_up=1,
         padding="same_zeros", use_bias=True,
         activation=tfc.GDN(name="igdn_2", inverse=True)))
-    self.add(tf.keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
+    self.add(keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
     self.add(tfc.SignalConv2D(
         1, (5, 5), name="layer_3", corr=False, strides_up=1,
         padding="same_zeros", use_bias=True,
         activation=None))
-    self.add(tf.keras.layers.Lambda(lambda x: x * ((2**bit_length)-1)))
+    self.add(keras.layers.Lambda(lambda x: x * ((2**bit_length)-1)))
 
 
-class HyperAnalysisTransform(tf.keras.Sequential):
+class HyperAnalysisTransform(keras.Sequential):
   """The analysis transform for the entropy model parameters."""
 
   def __init__(self, num_filters_hidden_hyperprior, num_filters_latent_hyperprior):
@@ -173,17 +172,17 @@ class HyperAnalysisTransform(tf.keras.Sequential):
         padding="same_zeros", use_bias=False,
         activation=None))
 
-class HyperSynthesisTransform(tf.keras.Sequential):
+class HyperSynthesisTransform(keras.Sequential):
   """The synthesis transform for the entropy model parameters."""
 
   def __init__(self, num_filters_hidden_hyperprior, num_filters_latent):
     super().__init__(name="hyper_synthesis")
-    self.add(tf.keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
+    self.add(keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
     self.add(tfc.SignalConv2D(
         num_filters_hidden_hyperprior, (5, 5), name="layer_0", corr=False, strides_up=1,
         padding="same_zeros", use_bias=True, kernel_parameter="variable",
         activation=tf.nn.relu))
-    self.add(tf.keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
+    self.add(keras.layers.Lambda(lambda x: tf.nn.depth_to_space(x, 2)))
     self.add(tfc.SignalConv2D(
         num_filters_hidden_hyperprior, (5, 5), name="layer_1", corr=False, strides_up=1,
         padding="same_zeros", use_bias=True, kernel_parameter="variable",
@@ -193,21 +192,21 @@ class HyperSynthesisTransform(tf.keras.Sequential):
         padding="same_zeros", use_bias=True, kernel_parameter="variable",
         activation=None))
     
-class SpectralAnalysisTransform(tf.keras.Sequential):
+class SpectralAnalysisTransform(keras.Sequential):
   """The analysis transform."""
 
   def __init__(self, num_filters_1D, init):
     super().__init__(name="analysis")
-    self.add(tf.keras.layers.Dense(num_filters_1D, activation=None, use_bias=False, kernel_initializer=init))
+    self.add(keras.layers.Dense(num_filters_1D, activation=None, use_bias=False, kernel_initializer=init))
 
 
-class CSMR2023061401_v3_5(tf.keras.Model):
+class CSMR2023061401_v4_0(keras.Model):
   """Main model class."""
 
-  def __init__(self, lmbda, num_filters, num_scales, scale_min, scale_max, bands, initialisation):
+  def __init__(self, lmbda, num_filters, num_scales, scale_min, scale_max, bands, progressive, initialisation):
     super().__init__()
-    self.max_lambda = lmbda[0] #MSE lambda (minimum)
-    self.min_lambda = lmbda[1] #MSE lambda (maximum)
+    self.max_lambda = lmbda[1] #MSE lambda (minimum)
+    self.min_lambda = lmbda[0] #MSE lambda (maximum)
     self.lmbda3 = lmbda[2] #regulariser
     self.lmbda4 = lmbda[3] #progressive variance
     self.num_scales = num_scales
@@ -229,9 +228,17 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     self.spectral_analysis_transform = SpectralAnalysisTransform(bands, init)
     self.hyper_analysis_transform = HyperAnalysisTransform(num_filters[2], num_filters[3])
     self.hyper_synthesis_transform = HyperSynthesisTransform(num_filters[2], num_filters[1]*bands)
-    self.modulating_transform = ModulatingTransform(64, 1, num_filters[1], lmbda[1])
+    self.modulating_transform = ModulatingTransform(192, num_filters[1]*bands, lmbda[1])
     self.hyperprior = tfc.NoisyDeepFactorized(batch_shape=(num_filters[3],))
-    self.wghts = 1/np.sqrt(np.arange(1, bands+1))
+    self.minband = progressive[0]
+    self.maxband = progressive[1]
+    self.stepsize = progressive[2]
+    if self.maxband >= bands:
+    	self.maxband = bands
+    if self.minband >= self.maxband:
+    	self.minband = self.maxband
+    if self.stepsize == 0:
+    	self.stepsize = 1
     self.build((None, None, None, bands))
 
   def call(self, x, training):
@@ -250,24 +257,27 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     lmda = tf.random.uniform((1,), minval=self.min_lambda, maxval=self.max_lambda)
     
     y = self.analysis_transform(x_1D)
-    mod = self.modulating_transform(tf.expand_dims(tf.expand_dims(tf.expand_dims(tf.expand_dims(lmda,0),0),0),0))
-    y = mod*y
+    mod = self.modulating_transform(tf.expand_dims(tf.expand_dims(tf.expand_dims(lmda, 0), 0), 0))
     
     y_3D = tf.transpose(y,(0,3,1,2))
     y_3D = tf.reshape(y_3D,(tf.shape(x)[0], self.num_filters_latent*self.bands, tf.shape(x)[1]//16, tf.shape(x)[2]//16))
     y_3D = tf.transpose(y_3D,(0,2,3,1))
     
+    y_3D = mod*y_3D
+    
     z = self.hyper_analysis_transform(abs(y_3D))
     z_hat, side_bits = side_entropy_model(z, training=training)
     indexes = self.hyper_synthesis_transform(z_hat)
     y_hat_3D, bits = entropy_model(y_3D, indexes, training=training)
+    
     demod = 1/mod
+    y_hat_3D = demod*y_hat_3D
     
     y_hat_3D = tf.transpose(y_hat_3D,(0,3,1,2))
     y_hat_3D = tf.reshape(y_hat_3D,(tf.shape(x)[0]*self.bands, self.num_filters_latent, tf.shape(x)[1]//16, tf.shape(x)[2]//16))
     y_hat = tf.transpose(y_hat_3D,(0,2,3,1))
     
-    x_hat_1D = self.synthesis_transform(demod*y_hat)
+    x_hat_1D = self.synthesis_transform(y_hat)
     
     I = tf.expand_dims(tf.expand_dims(tf.eye(self.bands), axis=1), axis=1)
     A = tf.squeeze(self.spectral_analysis_transform(I))
@@ -275,8 +285,10 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     T = tf.linalg.matrix_transpose(A)
     reg = tf.reduce_sum((tf.linalg.matmul(A,T)-tf.squeeze(I))**2)
     
-    #In this version, the progressive hierarchisation loss is calculated only using the spectral transfrom, not the full transform.
-    var = tf.reduce_mean((x_spec*self.wghts)**2)
+    # In this version, the progressive hierarchisation loss is calculated only using the spectral transfrom, not the full transform.
+    k = self.minband + self.stepsize*tf.squeeze(tf.random.categorical(tf.math.log([((self.maxband-(self.minband))//self.stepsize)*[1/((self.maxband-(self.minband))//self.stepsize),]]), 1))
+    x_speck = tf.concat((x_spec[:, :, :, :k],0*x_spec[:, :, :, k:]), axis=-1)
+    part_loss = tf.reduce_sum((tf.linalg.matvec(T,x_speck)-x)**2)
 
     # Total number of bits divided by total number of pixels.
     num_pixels = tf.cast(tf.reduce_prod(tf.shape(x)[:-1]), bits.dtype)
@@ -284,12 +296,12 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     # Mean squared error across pixels.
     mse_2D = tf.reduce_mean(tf.math.squared_difference(x_1D, x_hat_1D))
     # The rate-distortion Lagrangian.
-    loss = bpp + lmda * mse_2D + 1/(det**2) + det**2 + self.lmbda3*reg - self.lmbda4*var
-    return loss, bpp, mse_2D, det, reg, var
+    loss = bpp + lmda * mse_2D + 1/(det**2) + det**2 + self.lmbda3*reg + self.lmbda4*part_loss
+    return loss, bpp, mse_2D, det, reg, part_loss
 
   def train_step(self, x):
     with tf.GradientTape() as tape:
-      loss, bpp, mse_2D, det, reg, var = self(x, training=True)
+      loss, bpp, mse_2D, det, reg, part_loss = self(x, training=True)
     variables = self.trainable_variables
     gradients = tape.gradient(loss, variables)
     self.optimizer.apply_gradients(zip(gradients, variables))
@@ -298,18 +310,18 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     self.mse_2D.update_state(mse_2D)
     self.det.update_state(det)
     self.reg.update_state(reg)
-    self.var.update_state(var)
-    return {m.name: m.result() for m in [self.loss, self.bpp, self.mse_2D, self.det, self.reg, self.var]}
+    self.part_loss.update_state(part_loss)
+    return {m.name: m.result() for m in [self.loss, self.bpp, self.mse_2D, self.det, self.reg, self.part_loss]}
 
   def test_step(self, x):
-    loss, bpp, mse_2D, det, reg, var = self(x, training=False)
+    loss, bpp, mse_2D, det, reg, part_loss = self(x, training=False)
     self.loss.update_state(loss)
     self.bpp.update_state(bpp)
     self.mse_2D.update_state(mse_2D)
     self.det.update_state(det)
     self.reg.update_state(reg)
-    self.var.update_state(var)
-    return {m.name: m.result() for m in [self.loss, self.bpp, self.mse_2D, self.det, self.reg, self.var]}
+    self.part_loss.update_state(part_loss)
+    return {m.name: m.result() for m in [self.loss, self.bpp, self.mse_2D, self.det, self.reg, self.part_loss]}
 
   def predict_step(self, x):
     raise NotImplementedError("Prediction API is not supported.")
@@ -322,12 +334,12 @@ class CSMR2023061401_v3_5(tf.keras.Model):
         weighted_metrics=None,
         **kwargs,
     )
-    self.loss = tf.keras.metrics.Mean(name="loss")
-    self.bpp = tf.keras.metrics.Mean(name="bpp")
-    self.mse_2D = tf.keras.metrics.Mean(name="mse_2D")
-    self.det = tf.keras.metrics.Mean(name="det")
-    self.reg = tf.keras.metrics.Mean(name="regulariser")
-    self.var = tf.keras.metrics.Mean(name="1D variance")
+    self.loss = keras.metrics.Mean(name="loss")
+    self.bpp = keras.metrics.Mean(name="bpp")
+    self.mse_2D = keras.metrics.Mean(name="mse_2D")
+    self.det = keras.metrics.Mean(name="det")
+    self.reg = keras.metrics.Mean(name="regulariser")
+    self.part_loss = keras.metrics.Mean(name="hierarchisation")
 
   def fit(self, *args, **kwargs):
     retval = super().fit(*args, **kwargs)
@@ -362,21 +374,24 @@ class CSMR2023061401_v3_5(tf.keras.Model):
       tf.TensorSpec(shape=(None, None, None, None), dtype=tf.float32),
       tf.TensorSpec(shape=(2,), dtype=tf.int32),
       tf.TensorSpec(shape=(2,), dtype=tf.int32),
-      tf.TensorSpec(shape=(None,), dtype=tf.float32)
+      tf.TensorSpec(shape=(None, None, None, None), dtype=tf.float32)
   ])
   def modulation(self, y, x_shape, y_shape, lmda):
     """Applies analysis transform and returns y vector."""
     # Add batch dimension and cast to float.
-    lmda = tf.reduce_sum(lmda)
-    mod = self.modulating_transform(tf.expand_dims(tf.expand_dims(tf.expand_dims(tf.expand_dims(lmda,0),0),0),0))
-    y = mod*y
+    lmda = tf.maximum(tf.minimum(lmda, self.max_lambda), self.min_lambda)
+    lmda_send = tf.round(255.*(lmda-self.min_lambda)/(self.max_lambda-self.min_lambda))
+    lmda_quant = (lmda_send/255.)*(self.max_lambda-self.min_lambda)+self.min_lambda
+    mod = self.modulating_transform(lmda_quant)
+    
     y_3D = tf.transpose(y,(0,3,1,2))
     y_3D = tf.reshape(y_3D,(1, self.num_filters_latent*self.bands, x_shape[0]//16, x_shape[1]//16))
     y_3D = tf.transpose(y_3D,(0,2,3,1))
     
+    y_3D = mod*y_3D
+    
     z = self.hyper_analysis_transform(abs(y_3D))
     # Preserve spatial shapes of both image and latents.
-    L = tf.as_string([lmda])
     z_shape = tf.shape(z)[1:-1]
     z_hat, _ = self.side_entropy_model(z, training=False)
     indexes = self.hyper_synthesis_transform(z_hat)
@@ -384,7 +399,7 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     side_string = self.side_entropy_model.compress(z)
     string = self.entropy_model.compress(y_3D, indexes)
     bps = tf.cast((tf.strings.length(string)+tf.strings.length(side_string))*8/(tf.reduce_prod(x_shape)*self.bands), dtype=tf.float32)
-    return string, side_string, z_shape, L, bps
+    return string, side_string, z_shape, tf.cast(lmda_send, tf.uint8), bps
 
   @tf.function(input_signature=[
       tf.TensorSpec(shape=(None,), dtype=tf.string),
@@ -392,7 +407,7 @@ class CSMR2023061401_v3_5(tf.keras.Model):
       tf.TensorSpec(shape=(2,), dtype=tf.int32),
       tf.TensorSpec(shape=(2,), dtype=tf.int32),
       tf.TensorSpec(shape=(2,), dtype=tf.int32),
-      tf.TensorSpec(shape=(1,), dtype=tf.string)
+      tf.TensorSpec(shape=(None, None, None, None), dtype=tf.uint8)
   ])
   def decompress(self, string, side_string, x_shape, y_shape, z_shape, L):
     """Decompresses an image."""
@@ -400,18 +415,21 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     A = tf.squeeze(self.spectral_analysis_transform(I))
     B = tf.linalg.inv(A)
     
-    V = tf.strings.to_number(L)
+    V = (tf.cast(L, tf.float32)/255.)*(self.max_lambda-self.min_lambda)+self.min_lambda
     
-    demod = 1/self.modulating_transform(tf.expand_dims(tf.expand_dims(tf.expand_dims(tf.expand_dims(V,0),0),0),0))
+    demod = 1/self.modulating_transform(V)
     z_hat = self.side_entropy_model.decompress(side_string, z_shape)
     indexes = self.hyper_synthesis_transform(z_hat)
     indexes = indexes[:, :y_shape[0], :y_shape[1], :]
     y_hat_3D = self.entropy_model.decompress(string, indexes)
+    
+    y_hat_3D = demod*y_hat_3D
+    
     y_hat_3D = tf.transpose(y_hat_3D,(0,3,1,2))
     y_hat_3D = tf.reshape(y_hat_3D,(self.bands, self.num_filters_latent, x_shape[0]//16, x_shape[1]//16))
     y_hat = tf.transpose(y_hat_3D,(0,2,3,1))
     
-    x_hat_1D = self.synthesis_transform(demod*y_hat)
+    x_hat_1D = self.synthesis_transform(y_hat)
     x_hat_1D = tf.transpose(x_hat_1D,(0,3,1,2))
     x_hat_1D = tf.reshape(x_hat_1D,(1, self.bands, x_shape[0], x_shape[1]))
     x_hat_1D = tf.transpose(x_hat_1D,(0,2,3,1))
@@ -451,6 +469,38 @@ class CSMR2023061401_v3_5(tf.keras.Model):
     # Remove batch dimension, and crop away any extraneous padding.
     x_hat = x_hat[0, :y_shape[0], :y_shape[1], :]
     
+    return tf.saturate_cast(tf.saturate_cast(tf.round(x_hat), tf.int32), data_type)
+
+  @tf.function(input_signature=[
+      tf.TensorSpec(shape=(None, None, None, None), dtype=tf.float32)
+  ])
+  def plain_modulation(self, lmda):
+    """Applies analysis transform and returns y vector."""
+    # Add batch dimension and cast to float.
+    mod = self.modulating_transform(lmda)
+    return mod
+
+  @tf.function(input_signature=[
+      tf.TensorSpec(shape=(None, None, None, None), dtype=tf.float32),
+      tf.TensorSpec(shape=(2,), dtype=tf.int32)
+  ])
+  def inverse_transform(self, y_hat_3D, x_shape):
+    """Decompresses an image only using the main transform, no decoding."""
+    I = tf.expand_dims(tf.expand_dims(tf.eye(self.bands), axis=1), axis=1)
+    A = tf.squeeze(self.spectral_analysis_transform(I))
+    B = tf.linalg.inv(A)
+    
+    y_hat_3D = tf.transpose(y_hat_3D,(0,3,1,2))
+    y_hat_3D = tf.reshape(y_hat_3D,(self.bands, self.num_filters_latent, x_shape[0]//16, x_shape[1]//16))
+    y_hat = tf.transpose(y_hat_3D,(0,2,3,1))
+    
+    x_hat_1D = self.synthesis_transform(y_hat)
+    x_hat_1D = tf.transpose(x_hat_1D,(0,3,1,2))
+    x_hat_1D = tf.reshape(x_hat_1D,(1, self.bands, x_shape[0], x_shape[1]))
+    x_hat_1D = tf.transpose(x_hat_1D,(0,2,3,1))
+    x_hat = tf.linalg.matvec(tf.linalg.matrix_transpose(B), x_hat_1D)
+    # Remove batch dimension, and crop away any extraneous padding.
+    # Then cast back to data type.
     return tf.saturate_cast(tf.saturate_cast(tf.round(x_hat), tf.int32), data_type)
 
 
@@ -501,11 +551,11 @@ def train(args):
   if args.check_numerics:
     tf.debugging.enable_check_numerics()
 
-  model = CSMR2023061401_v3_5(
+  model = CSMR2023061401_v4_0(
       args.lmbda, args.num_filters, args.num_scales, args.scale_min,
-      args.scale_max, args.bands, args.initialisation)
+      args.scale_max, args.bands, args.progressive, args.initialisation)
   model.compile(
-      optimizer=tf.keras.optimizers.Adam(learning_rate=args.learning_rate),
+      optimizer=keras.optimizers.Adam(learning_rate=args.learning_rate),
   )
 
   if args.train_glob:
@@ -528,11 +578,11 @@ def train(args):
       validation_data=validation_dataset.cache(),
       validation_freq=1,
       callbacks=[
-          tf.keras.callbacks.TerminateOnNaN(),
-          tf.keras.callbacks.TensorBoard(
+          keras.callbacks.TerminateOnNaN(),
+          keras.callbacks.TensorBoard(
               log_dir=args.train_path,
               histogram_freq=1, update_freq="epoch"),
-          tf.keras.callbacks.experimental.BackupAndRestore(args.train_path),
+          keras.callbacks.experimental.BackupAndRestore(args.train_path),
       ],
       verbose=int(args.verbose),
   )
@@ -542,7 +592,7 @@ def train(args):
 def compress(args):
   """Compresses an image."""
   # Load model and use it to compress the image.
-  model = tf.keras.models.load_model(args.model_path)
+  model = keras.models.load_model(args.model_path)
   inputs = glob.glob(args.input_file)
   for input_file in inputs:
       if args.height == None or args.width == None or args.bands == None:
@@ -550,9 +600,15 @@ def compress(args):
           x = read_raw(input_file,int(height),int(width),int(bands),int(endianess))
       else:
           x = read_raw(input_file,args.height,args.width,args.bands,args.endianess)
-      y, x_shape, y_shape = model.main_transform(x)          
-      string_max, side_string_max, z_shape, L_max, bps_max = model.modulation(y, x_shape, y_shape, tf.constant([args.quality]))
+      y, x_shape, y_shape = model.main_transform(x)
       
+      if args.quality_array:
+          # Note the array is expected to be stored with the same endianness as the main array.
+          Q = tf.expand_dims(read_raw(args.quality_array, int(height)//16, int(width)//16, 1, int(endianess), tf.float32),0)
+      else:
+          Q = tf.ones((1, 1, 1, 1), dtype=tf.float32)*args.quality
+
+      string_max, side_string_max, z_shape, L_max, bps_max = model.modulation(y, x_shape, y_shape, Q)
       if args.bitrate == None:
           string, side_string, L = string_max, side_string_max, L_max
       else:
@@ -575,7 +631,7 @@ def compress(args):
             else:
                 min_lmbda = mid_lmbda
                 string_min, side_string_min, L_min, min_lmbda, bps_min = string_mid, side_string_mid, L_mid, mid_lmbda, bps_mid
-      
+      L = tf.reshape(L, (-1,))
       tensors = string, side_string, x_shape, y_shape, z_shape, L
     
       # Write a binary file with the shape information and the compressed string.
@@ -588,7 +644,7 @@ def compress(args):
 def decompress(args):
   """Decompresses an image."""
   # Load the model and determine the dtypes of tensors required to decompress.
-  model = tf.keras.models.load_model(args.model_path)
+  model = keras.models.load_model(args.model_path)
   dtypes = [t.dtype for t in model.decompress.input_signature]
   inputs = glob.glob(args.input_file)
   for input_file in inputs:
@@ -596,7 +652,12 @@ def decompress(args):
       # and decompress the image using the model.
       with open(input_file, "rb") as f:
         packed = tfc.PackedTensors(f.read())
-      tensors = packed.unpack(dtypes)
+      string, side_string, x_shape, y_shape, z_shape, L = packed.unpack(dtypes)
+      try:
+          L = tf.reshape(L, (1, y_shape[0], y_shape[1], 1))
+      except:
+          L = tf.reshape(L, (1, 1, 1, 1))
+      tensors = string, side_string, x_shape, y_shape, z_shape, L
       x_hat = model.decompress(*tensors)
     
       # Write reconstructed image out as a RAW file.
@@ -605,7 +666,7 @@ def decompress(args):
 def compress1D(args):
   """Compresses an image using only the spectral transform."""
   # Load model and use it to compress the image.
-  model = tf.keras.models.load_model(args.model_path)
+  model = keras.models.load_model(args.model_path)
   inputs = glob.glob(args.input_file)
   for input_file in inputs:
       if args.height == None or args.width == None or args.bands == None:
@@ -623,7 +684,7 @@ def compress1D(args):
 def decompress1D(args):
   """Deompresses an image using only the spectral transform (raw image input)."""
   # Load model and use it to compress the image.
-  model = tf.keras.models.load_model(args.model_path)
+  model = keras.models.load_model(args.model_path)
   inputs = glob.glob(args.input_file)
   for input_file in inputs:
       if args.height == None or args.width == None or args.bands == None:
@@ -642,7 +703,7 @@ def decompress1D(args):
 def store_latent(args):
   """Compresses an image and stores the latent representation."""
   # Load model and use it to compress the image and save the latent representation.
-  model = tf.keras.models.load_model(args.model_path)
+  model = keras.models.load_model(args.model_path)
   inputs = glob.glob(args.input_file)
   for input_file in inputs:
       if args.height == None or args.width == None or args.bands == None:
@@ -658,6 +719,194 @@ def store_latent(args):
       
       write_raw(path+'_latent-'+str(args.keep_latent)+'.'+str(int(tf.shape(y)[3]))+'_'+str(int(tf.shape(y)[1]))+'_'+str(int(tf.shape(y)[2]))+'_6_0_0.raw', y[args.keep_latent,:,:,:])
 
+def transform(args):
+  """Applies the main 1D-2D transform to an image."""
+  # Load model and use it to compress the image.
+  model = tf.keras.models.load_model(args.model_path)
+  inputs = glob.glob(args.input_file)
+  for input_file in inputs:
+      if args.height == None or args.width == None or args.bands == None:
+          bands, width, height, endianess, datatype = get_geometry(input_file.split('/')[-1])
+          geometry = '.'+input_file.split('/')[-1].split('.')[-2]+'.raw'
+          path = input_file.replace(geometry,'')
+          x = read_raw(input_file, int(height), int(width), int(bands), int(endianess), data_type)
+      else:
+          x = read_raw(input_file, args.height, args.width, args.bands, args.endianess, data_type)
+          path = input_file
+      y, x_shape, y_shape = model.main_transform(x)
+      
+      y_3D = tf.transpose(y, (0,3,1,2))
+      y_3D = tf.reshape(y_3D,(1, int(tf.shape(y)[-1])*int(bands), x_shape[0]//16, x_shape[1]//16))
+      y_3D = tf.transpose(y_3D,(0,2,3,1))
+      
+      write_raw(path+'_noquant.'+str(int(tf.shape(y)[-1])*int(bands))+'_'+str(int(width)//16)+'_'+str(int(height)//16)+'_6_1_0.raw', y_3D[0,:,:,:])
+
+def modulation(args):
+  """Applies plain modulation to obtain the modulation vector from a lambda value."""
+  # Load model and use it to compress the image.
+  model = tf.keras.models.load_model(args.model_path)
+  mod = model.plain_modulation(tf.expand_dims(tf.expand_dims(tf.expand_dims(tf.constant([args.quality]), 0), 0), 0))
+  M = np.array(mod)
+  M.tofile('./modulated_'+str(args.quality)+'.'+str(int(tf.shape(mod)[-1]))+'_1_1_6_1_0.raw', format='.raw')
+
+def inverse_transform(args):
+  """Applies the inverse 2D-1D transforms to a latent representation."""
+  # Load model and use it to compress the image.
+  model = tf.keras.models.load_model(args.model_path)
+  inputs = glob.glob(args.input_file)
+  for input_file in inputs:
+      if args.height == None or args.width == None or args.bands == None:
+          bands, width, height, endianess, datatype = get_geometry(input_file.split('/')[-1])
+          geometry = '.'+input_file.split('/')[-1].split('.')[-2]+'.raw'
+          path = input_file.replace(geometry,'')
+          if datatype == '0':
+            D = np.bool_
+          elif datatype == '1':
+            D = tf.uint8
+          elif datatype == '2':
+            D = tf.uint16
+          elif datatype == '3':
+            D = tf.int16
+          elif datatype == '4':
+            D = tf.int32
+          elif datatype == '5':
+            D = tf.int64
+          elif datatype == '6':
+            D = tf.float32
+          else:
+            D = tf.float64
+          
+          y = read_raw(input_file, int(height), int(width), int(bands), int(endianess), D)
+      else:
+          y = read_raw(input_file, args.height, args.width, args.bands, args.endianess, tf.float32)
+          path = input_file
+          bands, width, height, endianess = args.bands, args.width, args.height, args.endianess
+      
+      x_hat = model.inverse_transform(tf.expand_dims(y, 0), tf.constant([16*int(height), 16*int(width)]))
+      
+      write_raw(path+'.'+str(int(tf.shape(x_hat)[-1]))+'_'+str(int(width)*16)+'_'+str(int(height)*16)+'_2_1_0.raw.tfci.raw', x_hat[0,:,:,:])
+
+def generate_coefficients(args):
+    """Generates the regression coefficients of a model for a test set and stores them in a file."""
+    from sklearn.linear_model import LinearRegression
+    
+    # Load model
+    model = tf.keras.models.load_model(args.model_path)
+    
+    # For every quality parameter, calculate modulation magnitude
+    qualities = []
+    magnitudes = []
+    for Qbin in range(256):
+        quality = args.minimum_quality+(Qbin*((args.maximum_quality-args.minimum_quality)/256))
+        mod = model.plain_modulation(tf.expand_dims(tf.expand_dims(tf.expand_dims(tf.constant([quality]), 0), 0), 0))
+        mod_magnitude = float(tf.reduce_mean(mod))
+        qualities.append([quality])
+        magnitudes.append(mod_magnitude)
+    qualities = np.array(qualities)
+    magnitudes = np.array(magnitudes)
+    
+    # Linear regression for modulator
+    regressor = LinearRegression().fit(qualities, magnitudes)
+    b = float(regressor.predict(np.array([[0]])))
+    a = float(regressor.predict(np.array([[1]])))-b
+    
+    # Compression and decompression at various qualities
+    inputs = glob.glob(args.input_file)
+    for input_file in inputs:
+        if args.height == None or args.width == None or args.bands == None:
+            bands, width, height, endianess, datatype = get_geometry(input_file.split('/')[-1])
+            x = read_raw(input_file, int(height), int(width), int(bands), int(endianess), data_type)
+        else:
+            x = read_raw(input_file, args.height, args.width, args.bands, args.endianess, data_type)
+            bands, width, height, endianess = args.bands, args.width, args.height, args.endianess
+        
+        y, x_shape, y_shape = model.main_transform(x)
+        
+        y_3D = tf.transpose(y, (0,3,1,2))
+        y_3D = tf.reshape(y_3D,(1, int(tf.shape(y)[-1])*int(bands), x_shape[0]//16, x_shape[1]//16))
+        y_3D = tf.transpose(y_3D,(0,2,3,1))
+                
+        # MSE baseline calculation
+        x_hat_0 = tf.cast(tf.cast(model.inverse_transform(y_3D, tf.constant([int(height), int(width)])), tf.int32), tf.float32)
+        x = tf.cast(tf.cast(x, tf.int32), tf.float32)
+        mse_0 = float(tf.reduce_mean((x-x_hat_0)**2))
+        
+        mpqq_mmqq = 0
+        mmqqqq = 0
+        
+        for Qbin in range(0, 256, 32):
+            quality = args.minimum_quality+(Qbin*((args.maximum_quality-args.minimum_quality)/256))
+            Q = tf.ones((1, 1, 1, 1))*quality
+            
+            string, side_string, z_shape, L, bps = model.modulation(y, x_shape, y_shape, Q)
+            tensors = string, side_string, x_shape, y_shape, z_shape, L
+            x_hat = tf.cast(tf.cast(model.decompress(*tensors), tf.int32), tf.float32)
+            
+            mse = float(tf.reduce_mean((x-x_hat)**2))
+            quant_step = 1/(2*((a*quality)+b))
+            mpqq_mmqq += mse_0*(mse-mse_0)*(quant_step**2)
+            mmqqqq += (mse_0**2)*(quant_step**4)
+    
+    # Calculate quadratic regression coefficient
+    alpha = mpqq_mmqq/mmqqqq
+    
+    # Write coefficients in file
+    f = open(args.model_path+'/fixed_quality_coefficients.config', 'w')
+    f.write(str(alpha)+','+str(a)+','+str(b))
+    f.close()
+
+def FQcompress(args):
+  """Compresses an image."""
+  import skimage.measure
+  # Load model and use it to compress the image.
+  model = tf.keras.models.load_model(args.model_path)
+  inputs = glob.glob(args.input_file)
+  for input_file in inputs:
+      if args.height == None or args.width == None or args.bands == None:
+          bands, width, height, endianess, datatype = get_geometry(input_file.split('/')[-1])
+          x = read_raw(input_file, int(height), int(width), int(bands), int(endianess), data_type)
+      else:
+          x = read_raw(input_file, args.height, args.width, args.bands, args.endianess, data_type)
+          bands, width, height, endianess = args.bands, args.width, args.height, args.endianess
+      y, x_shape, y_shape = model.main_transform(x)
+      
+      y_3D = tf.transpose(y, (0,3,1,2))
+      y_3D = tf.reshape(y_3D,(1, int(tf.shape(y)[-1])*int(bands), x_shape[0]//16, x_shape[1]//16))
+      y_3D = tf.transpose(y_3D,(0,2,3,1))
+      
+      # MSE baseline calculation
+      x_hat_0 = tf.cast(tf.cast(model.inverse_transform(y_3D, tf.constant([int(height), int(width)])), tf.int32), tf.float32)
+      x = tf.cast(tf.cast(x, tf.int32), tf.float32)
+      mse_0_full = (x-x_hat_0)**2
+      mse_0_full_np = np.array(mse_0_full)
+      mse_0 = skimage.measure.block_reduce(mse_0_full_np, (1, args.patchsize, args.patchsize, 1), np.mean)
+      
+      # Load regression coefficients
+      f = open(args.model_path+'/fixed_quality_coefficients.config', 'r')
+      coefs = f.read().split(',')
+      alpha = float(coefs[0])
+      a = float(coefs[1])
+      b = float(coefs[2])
+      
+      # Quality parameters prediction
+      target_magnitude = np.sqrt((alpha*mse_0)/(4*np.maximum(args.target_MSE-mse_0, 0.0001)))
+      target_quality = np.mean(((target_magnitude-b)/a).astype(np.float32), axis = -1, keepdims=True)
+      Q = target_quality.repeat(args.patchsize//16, axis=1).repeat(args.patchsize//16, axis=2)
+            
+      string_max, side_string_max, z_shape, L_max, bps_max = model.modulation(y, x_shape, y_shape, Q)
+      
+      string, side_string, L = string_max, side_string_max, L_max
+      
+      L = tf.reshape(L, (-1,))
+      tensors = string, side_string, x_shape, y_shape, z_shape, L
+    
+      # Write a binary file with the shape information and the compressed string.
+      packed = tfc.PackedTensors()
+      packed.pack(tensors)
+      with open(input_file+'.tfci', "wb") as f:
+        f.write(packed.string)
+
+
 def parse_args(argv):
   """Parses command line arguments."""
   parser = argparse_flags.ArgumentParser(
@@ -668,7 +917,7 @@ def parse_args(argv):
       "--verbose", "-V", action="store_true",
       help="Report progress and metrics when training or compressing.")
   parser.add_argument(
-      "--model_path", default="CSMR2023061401_v3_4",
+      "--model_path", default="CSMR2023061401_v4_0",
       help="Path where to save/load the trained model.")
   parser.add_argument(
       "--CPU", action="store_true",
@@ -721,7 +970,7 @@ def parse_args(argv):
       "--scale_max", type=float, default=256.,
       help="Maximum value of standard deviation of Gaussians.")
   train_cmd.add_argument(
-      "--train_path", default="/tmp/CSMR2023061401_v3_4",
+      "--train_path", default="/tmp/CSMR2023061401_v4_0",
       help="Path where to log training metrics for TensorBoard and back up "
            "intermediate model checkpoints.")
   train_cmd.add_argument(
@@ -767,6 +1016,10 @@ def parse_args(argv):
   train_cmd.add_argument(
       "--initialisation", type=str, default=None,
       help="Path to a RAW file containing the weights for spectral transform initialisation. These are expected to be stored as float32, and to be in the shape (bands, bands).")
+  train_cmd.add_argument(
+      "--progressive", type=int, nargs=3, default=[0,1,1], dest="progressive",
+      help="Parameters for progressive sampling. First entry corresponds to the minimum band that may be sampled. Second entry is the maximum band index that may be sampled. Third and last entry is the stepsize of the sampling (bin size). Keep in mind the band indexes start at 0.")
+
 
   # 'compress' subcommand.
   compress_cmd = subparsers.add_parser(
@@ -781,6 +1034,24 @@ def parse_args(argv):
       description="Reads a TFCI file, reconstructs the image, and writes back "
                   "a raw file.")
   
+  # 'transform' subcommand.
+  transform_cmd = subparsers.add_parser(
+      "transform",
+      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+      description="Reads a raw file, applies the main transform on it, and writes a raw file.")
+  
+  # 'inverse transform' subcommand.
+  inv_transform_cmd = subparsers.add_parser(
+      "inverse_transform",
+      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+      description="Reads a raw file float32, applies the decoder main transform on it, and writes a raw file.")
+  
+  # 'transform' subcommand.
+  modulation_cmd = subparsers.add_parser(
+      "modulation",
+      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+      description="Given a quality parameter (lambda), constructs the modulation vector and stores it as a raw file.")
+  
   # 'compress1D' subcommand.
   compress1D_cmd = subparsers.add_parser(
       "compress1D",
@@ -794,16 +1065,46 @@ def parse_args(argv):
       description="Reads a RAW file, compresses the image only spectrally, then reconstructs the image only spectrally, and writes back "
                   "a raw file.")
   
+   # 'generate coefficients' subcommand.
+  generate_cmd = subparsers.add_parser(
+      "generate_coefficients",
+      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+      description="Generates regression coefficients for a model on a test set and stores them in the model folder.")
+  
+  # 'fixed-quality compress' subcommand.
+  FQcompress_cmd = subparsers.add_parser(
+      "FQcompress",
+      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+      description="Reads a raw file, compresses it at a user-defined fixed MSE in some user-defined patches, and writes a TFCI file.")
+
+  
   compress_cmd.add_argument("--quality",
                             type=float, default=0.1,
                             help="Lambda value regulating the rate-distortion tradeoff. A higher lambda should yield higher quality and rate images. If --bitrate is used, this lambda value will be used as the maximum lambda value in binary search."
+                            )
+  compress_cmd.add_argument("--quality_array",
+                            type=str,
+                            help="Array with lambda values regulating the rate-distortion tradeoff for each latent pixel."
                             )
   compress_cmd.add_argument("--bitrate",
                             type=float, default=None,
                             help="Bitrate to compress the images at, in bits per sample (bps, equivalent to bits per pixel per band)."
                             )
+  modulation_cmd.add_argument("quality",
+                            type=float, default=0.0001,
+                            help="Lambda value regulating the rate-distortion tradeoff."
+                            )
+  generate_cmd.add_argument("--minimum_quality",
+                            type=float, default=0.0001,
+                            help="Minimum quality used in the model to generate coefficients."
+                            )
+  generate_cmd.add_argument("--maximum_quality",
+                            type=float, default=0.01,
+                            help="Maximum quality used in the model to generate coefficients."
+                            )
+  
   # Arguments for both 'compress' and 'decompress'.
-  for cmd, ext in ((compress_cmd, ".tfci"), (decompress_cmd, ".raw"), (compress1D_cmd, ".tfci"), (decompress1D_cmd, ".raw")):
+  for cmd, ext in ((compress_cmd, ".tfci"), (decompress_cmd, ".raw"), (compress1D_cmd, ".tfci"), (decompress1D_cmd, ".raw"), (transform_cmd, ".tfci"), (inv_transform_cmd, ".raw"), (generate_cmd, ".raw"), (FQcompress_cmd, ".raw")):
     cmd.add_argument(
         "input_file",
         help='Input filename or glob pattern. If a glob pattern is used, delimitate it with "".')
@@ -823,6 +1124,15 @@ def parse_args(argv):
   compress_cmd.add_argument(
           "--keep_latent", type=int, default=None,
           help="When selected, stores the latent representation of the image as it is produced by the main transform. Indicate the number of frame you wish to store.")
+  
+  FQcompress_cmd.add_argument("target_MSE",
+                            type=float,
+                            help="Target MSE for fixed-quality compression. Will be homogeneous for all blocks."
+                            )
+  FQcompress_cmd.add_argument("patchsize",
+                            type=int,
+                            help="Size of blocks where to aim for fixed-quality compression."
+                            )
 
   
   # Parse arguments.
@@ -849,6 +1159,17 @@ def main(args):
     compress1D(args)
   elif args.command == "decompress1D":
     decompress1D(args)
+  elif args.command == "transform":
+    transform(args)
+  elif args.command == "inverse_transform":
+    inverse_transform(args)
+  elif args.command == "modulation":
+    modulation(args)
+  elif args.command == "generate_coefficients":
+    generate_coefficients(args)
+  elif args.command == "FQcompress":
+    FQcompress(args)
+
 
 
 if __name__ == "__main__":
