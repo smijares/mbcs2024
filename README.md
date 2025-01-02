@@ -22,7 +22,8 @@ To train a model, call the `train` command in the architecture script using the 
 
 ```python3 architecture.py --model_path ./models/model_name train "/path/to/folder/*.raw" --lambda 0.00001 0.01 --epochs 1000 --steps_per_epoch 1000 --patchsize 256 --batchsize 6 --height 512 --width 512 --bands 8```
 
-As described in the main paper, the loss function is: $$L = R(y)+ \lambda_1 \operatorname{MSE}(x_{1D},\hat{x}_{1D}) + \frac{1}{(\det A)^2} + (\det A)^2 + \lambda_2 \operatorname{MSE}( A^T A, I_n) + \lambda_3 \operatorname{MSE}(x_{i,j}, A^{-1}P_kAx_{i,j})$$
+As described in the main paper, the loss function is:
+$L = R(y)+ \lambda_1 \operatorname{MSE}(x_{1D},\hat{x}_{1D}) + \frac{1}{(\det A)^2} + (\det A)^2 + \lambda_2 \operatorname{MSE}( A^T A, I_n) + \lambda_3 \operatorname{MSE}(x_{i,j}, A^{-1}P_kAx_{i,j})$
 
 The following table lists $\lambda$ values used for training our models.
 
